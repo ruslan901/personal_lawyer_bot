@@ -1,31 +1,59 @@
 import sqlite3
-from datetime import datetime
-from config import USLUGI
+from contextlib import contextmanager
+import aiosqlite
 
-conn = sqlite3.connect('lawyer_bot.db', check_same_thread=False)
-cursor = conn.cursor()
+# Глобальное подключение для синхронного кода
+conn = None
 
-cursor.execute('''CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    client_id INTEGER, client_name TEXT, service TEXT, price INTEGER,
-    status TEXT DEFAULT 'new', created_at TEXT
-)''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS user_state (
-    user_id INTEGER PRIMARY KEY, active_order INTEGER
-)''')
-conn.commit()
 
-def has_active_order(user_id):
-    cursor.execute("SELECT id FROM orders WHERE client_id=? AND status IN ('new','accepted')", (user_id,))
-    return cursor.fetchone()
+def get_connection():
+    global conn
+    if conn is None:
+        conn = sqlite3.connect('/app/database.db', check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+    return conn
 
-def create_order(client_id, client_name, service_key):
-    srv = USLUGI[service_key]
-    cursor.execute("""
-        INSERT INTO orders (client_id, client_name, service, price, status, created_at) 
-        VALUES (?, ?, ?, ?, 'new', ?)
-    """, (client_id, client_name, srv['name'], srv['price'], datetime.now().isoformat()))
-    order_id = cursor.lastrowid
-    cursor.execute("INSERT OR REPLACE INTO user_state (user_id, active_order) VALUES (?, ?)", (client_id, order_id))
+
+def init_db():
+    """Инициализация базы данных - СОЗДАЁТ ТАБЛИЦЫ"""
+    global conn
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Таблица заказов
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            service TEXT NOT NULL,
+            price REAL NOT NULL,
+            status TEXT DEFAULT 'new',
+            lawyer_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Таблица юристов
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS lawyers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL UNIQUE,
+            status TEXT DEFAULT 'free',
+            rating REAL DEFAULT 0.0
+        )
+    ''')
+
     conn.commit()
-    return order_id
+    print("✅ База данных инициализирована!")
+
+
+# Асинхронные функции для бота
+async def get_async_db():
+    async with aiosqlite.connect('/app/database.db') as db:
+        db.row_factory = lambda cursor, row: dict(zip([col[0] for col in cursor.description], row))
+        yield db
+
+
+if __name__ == "__main__":
+    init_db()
+
