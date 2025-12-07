@@ -1,4 +1,5 @@
 import sqlite3
+import os
 
 
 def init_db():
@@ -29,9 +30,9 @@ def get_orders(client_id=None):
         cursor.execute("SELECT * FROM orders WHERE client_id = ? ORDER BY created_at DESC", (client_id,))
     else:
         cursor.execute("SELECT * FROM orders ORDER BY created_at DESC")
-    orders = cursor.fetchall()
+    orders = [dict(row) for row in cursor.fetchall()]
     conn.close()
-    return [dict(row) for row in orders]
+    return orders
 
 
 def update_order_status(order_id, status):
@@ -60,6 +61,7 @@ def get_order_client_id(order_id):
     result = cursor.fetchone()
     conn.close()
     return result[0] if result else None
+
 
 
 
