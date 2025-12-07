@@ -53,4 +53,10 @@ def create_order(client_id, service_name, price):
     return order_id
 
 
+def get_order_client_id(order_id):
+    conn = sqlite3.connect('/app/database.db')
+    result = conn.execute("SELECT client_id FROM orders WHERE id = ?", (order_id,)).fetchone()
+    conn.close()
+    return result[0] if result else None
+
 
